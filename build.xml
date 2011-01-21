@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!-- ////////////////////////////////////////////////////////////////////// -->
+<!-- Copyright (c) 2008 by Naohide Sano, All rights reserved.               -->
+<!--                                                                        -->
+<!-- Written by Naohide Sano                                                -->
+<!--                                                                        -->
+<!-- mocap                                                                  -->
+<!--                                                                        -->
+<!-- @author	Naohide Sano                                                -->
+<!-- @version	0.00	080523	nsano	initial version                     -->
+<!--                                                                        -->
+<!-- ////////////////////////////////////////////////////////////////////// -->
+
+<project name="vavi-sensor-mocap" default="run" basedir="."
+         xmlns:ivy="antlib:org.apache.ivy.ant">
+
+  <property file="local.properties" />
+
+  <property name="dir.native" value="src/main/jni" />
+
+  <property name="dir.lib" value="lib" />
+  <property name="dir.build" value="target/classes" />
+
+  <!-- クラスパスの定義 -->
+  <path id="project.class.path">
+    <fileset dir="${dir.lib}">
+      <include name="*.jar" />
+    </fileset>
+  </path>
+
+  <!-- ターゲットの定義 -->
+
+  <!-- clean -->
+  <target name="clean" description="ビルド環境のクリア">
+    <delete file="${dir.lib}/libSmsWrapper.jnilib" />
+    <delete>
+      <fileset dir="${dir.build}">
+        <include name="**/*" />
+      </fileset>
+    </delete>
+    <delete>
+      <fileset dir="target/test-classes">
+        <include name="**/*" />
+      </fileset>
+    </delete>
+    <delete>
+      <fileset dir="${dir.native}">
+        <include name="*.o" />
+        <include name="vavi_sensor_mocap_*_*.h" />
+      </fileset>
+    </delete>
+  </target>
+
+  <!-- prepare -->
+  <target name="prepare" description="準備">
+    <mkdir dir="${dir.lib}" />
+    <mkdir dir="${dir.build}" />
+  </target>
+
+  <!-- javac -->
+  <target name="compile" depends="prepare" description="コンパイル">
+    <javac debug="on" deprecation="true" destdir="${dir.build}"
+    	   target="1.5">
+      <classpath refid="project.class.path" />
+      <include name="**/*.java" />
+      <src path="src/main/java" />
+    </javac>
+
+    <javac debug="on" deprecation="true" destdir="target/test-classes"
+           target="1.5">
+      <classpath>
+      	<path refid="project.class.path" />
+        <pathelement location="${dir.build}" />
+      </classpath>
+      <include name="**/*.java" />
+      <src path="src/test/java" />
+    </javac>
+
+  </target>
+
+  <!-- javah -->
+  <target name="javah" depends="compile" description="Makeing Header">
+    <javah destdir="${dir.native}">
+      <classpath>
+        <pathelement location="${dir.build}" />
+        <path refid="project.class.path" />
+        <pathelement location="/Library/Java/Extensions/vecmath.jar" />
+      </classpath>
+      <class name="vavi.sensor.mocap.macbook.NiteMocap" />
+    </javah>
+  </target>
+
+  <!-- gcc -->
+  <target name="compile.native" depends="javah" description="コンパイル C">
+    <apply executable="g++" dest="${dir.native}" parallel="false">
+      <arg value="-c" />
+      <arg line="-arch i386 -arch x86_64" />
+      <arg line=" -O2 -DNDEBUG -msse3" />
+      <arg value="-I${openni.home}/Include" />
+      <arg value="-I${jni.include}" />
+      <arg value="-I/usr/include/ni" />
+      <arg value="-o"/>
+      <targetfile/>
+      <srcfile/>
+      <fileset dir="${dir.native}" includes="*.cpp"/>
+      <mapper type="glob" from="*.cpp" to="*.o"/>
+    </apply>
+  </target>
+
+  <!-- link -->
+  <target name="link" depends="compile.native" description="Makeing DLL">
+    <apply executable="g++" dest="${dir.lib}">
+      <arg line="-dynamiclib" />
+      <arg line="-arch i386 -arch x86_64" />
+      <arg line="-L${openni.home}/Lib"/>
+      <arg line="-lOpenNI"/>
+      <arg line="-o" />
+      <targetfile />
+      <srcfile />
+      <fileset dir="${dir.native}" includes="*.o" />
+      <mapper type="glob" from="*.o" to="lib*.jnilib"/>
+    </apply>
+  </target>
+
+  <!-- run -->
+  <target name="run" depends="link" description="Run program">
+    <java classname="Test8" fork="yes">
+      <jvmarg value="-Djava.library.path=${dir.lib}" />
+      <classpath>
+        <path refid="project.class.path" />
+        <pathelement location="${dir.build}" />
+        <pathelement location="target/test-classes" />
+      </classpath>
+      <arg value="${run.in}" />
+    </java>
+  </target>
+
+</project>
+
+<!-- -->

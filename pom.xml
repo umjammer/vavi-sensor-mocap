@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>vavi</groupId>
+  <artifactId>vavi-sensor-accelerometer</artifactId>
+  <version>0.0.1</version>
+  <build>
+    <sourceDirectory>src/main/java</sourceDirectory>
+    <testSourceDirectory>src/test/java</testSourceDirectory>
+    <plugins>
+      <plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <source>1.5</source>
+          <target>1.5</target>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+  <dependencies>
+  	<dependency>
+  		<groupId>com.sun.jna</groupId>
+  		<artifactId>jna</artifactId>
+  		<version>3.1.0</version>
+  		<optional>false</optional>
+  	</dependency>
+  </dependencies>
+</project>
