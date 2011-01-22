@@ -1,0 +1,6 @@
+##
+# mocap
+#
+
+openni.home=/usr/local/src/openni-avin2/OpenNI-Bin-MacOSX-v1.0.0.25
+jni.include=/System/Library/Frameworks/JavaVM.framework/Versions/Current/Headers
