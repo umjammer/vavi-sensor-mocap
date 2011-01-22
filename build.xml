@@ -61,14 +61,14 @@
   <!-- javac -->
   <target name="compile" depends="prepare" description="ƒRƒ“ƒpƒCƒ‹">
     <javac debug="on" deprecation="true" destdir="${dir.build}"
-    	   target="1.5">
+    	   target="1.5" includeantruntime="false">
       <classpath refid="project.class.path" />
       <include name="**/*.java" />
       <src path="src/main/java" />
     </javac>
 
     <javac debug="on" deprecation="true" destdir="target/test-classes"
-           target="1.5">
+           target="1.5" includeantruntime="false">
       <classpath>
       	<path refid="project.class.path" />
         <pathelement location="${dir.build}" />

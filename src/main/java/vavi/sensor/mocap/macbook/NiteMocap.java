@@ -21,7 +21,10 @@ public class NiteMocap implements Mocap<float[][][]> {
     private native int init();
     
     /** */
-    public native int sense();
+    public int sense() {
+        inject(data);
+        return 0;
+    }
 
     /** */
     private native void destroy();
@@ -38,7 +41,13 @@ public class NiteMocap implements Mocap<float[][][]> {
         destroy();
     }
 
-    public native float[][][] get();
+    private float[][][] data = new float[15][16][9];
+
+    private native void inject(float[][][] data);
+
+    public float[][][] get() {
+        return data;
+    }
 
     static {
         try {

@@ -47,6 +47,7 @@ XnChar g_strPose[20] = "";
 // Callback: New user was detected
 void XN_CALLBACK_TYPE User_NewUser(xn::UserGenerator& generator, XnUserID nId, void* pCookie) {
   printf("New User %d\n", nId);
+  fflush(stdout);
   // New user found
   if (g_bNeedPose) {
     g_UserGenerator.GetPoseDetectionCap().StartPoseDetection(g_strPose, nId);
@@ -58,11 +59,13 @@ void XN_CALLBACK_TYPE User_NewUser(xn::UserGenerator& generator, XnUserID nId, v
 // Callback: An existing user was lost
 void XN_CALLBACK_TYPE User_LostUser(xn::UserGenerator& generator, XnUserID nId, void* pCookie) {
   printf("Lost user %d\n", nId);
+  fflush(stdout);
 }
 
 // Callback: Detected a pose
 void XN_CALLBACK_TYPE UserPose_PoseDetected(xn::PoseDetectionCapability& capability, const XnChar* strPose, XnUserID nId, void* pCookie) {
   printf("Pose %s detected for user %d\n", strPose, nId);
+  fflush(stdout);
   g_UserGenerator.GetPoseDetectionCap().StopPoseDetection(nId);
   g_UserGenerator.GetSkeletonCap().RequestCalibration(nId, TRUE);
 }
@@ -70,6 +73,7 @@ void XN_CALLBACK_TYPE UserPose_PoseDetected(xn::PoseDetectionCapability& capabil
 // Callback: Started calibration
 void XN_CALLBACK_TYPE UserCalibration_CalibrationStart(xn::SkeletonCapability& capability, XnUserID nId, void* pCookie) {
   printf("Calibration started for user %d\n", nId);
+  fflush(stdout);
 }
 
 // Callback: Finished calibration
@@ -77,10 +81,12 @@ void XN_CALLBACK_TYPE UserCalibration_CalibrationEnd(xn::SkeletonCapability& cap
   if (bSuccess)	{
     // Calibration succeeded
     printf("Calibration complete, start tracking user %d\n", nId);
+    fflush(stdout);
     g_UserGenerator.GetSkeletonCap().StartTracking(nId);
   }	else {
     // Calibration failed
     printf("Calibration failed for user %d\n", nId);
+    fflush(stdout);
     if (g_bNeedPose) {
       g_UserGenerator.GetPoseDetectionCap().StartPoseDetection(g_strPose, nId);
     } else {
@@ -91,11 +97,12 @@ void XN_CALLBACK_TYPE UserCalibration_CalibrationEnd(xn::SkeletonCapability& cap
 
 extern xn::UserGenerator g_UserGenerator;
 
-float result[15][16][9];
+void inject(XnUserID player, XnSkeletonJoint eJoint1, XnSkeletonJoint eJoint2,
+  JNIEnv *env, jobjectArray array1, int index) {
 
-void fillResult(int index, XnUserID player, int pattern, XnSkeletonJoint eJoint1, XnSkeletonJoint eJoint2) {
   if (!g_UserGenerator.GetSkeletonCap().IsTracking(player)) {
-    printf("not tracked!\n");
+//printf("not tracked!\n");
+//fflush(stdout);
     return;
   }
 
@@ -104,28 +111,48 @@ void fillResult(int index, XnUserID player, int pattern, XnSkeletonJoint eJoint1
   g_UserGenerator.GetSkeletonCap().GetSkeletonJointPosition(player, eJoint2, joint2);
 
   if (joint1.fConfidence < 0.5 || joint2.fConfidence < 0.5) {
+//printf("low confidence\n");
+//fflush(stdout);
     return;
   }
 
-  result[index][pattern][0] = eJoint1;
-  result[index][pattern][1] = joint1.position.X; 
-  result[index][pattern][2] = joint1.position.Y;
-  result[index][pattern][3] = joint1.position.Z;
-  result[index][pattern][4] = eJoint2;
-  result[index][pattern][5] = joint2.position.X;
-  result[index][pattern][6] = joint2.position.Y;
-  result[index][pattern][7] = joint2.position.Z;
-  result[index][pattern][8] = player;
+  jfloatArray array2 = (jfloatArray) env->GetObjectArrayElement(array1, index);
+  float* data = env->GetFloatArrayElements(array2, NULL);
+
+  data[0] = eJoint1;
+  data[1] = joint1.position.X; 
+  data[2] = joint1.position.Y;
+  data[3] = joint1.position.Z;
+  data[4] = eJoint2;
+  data[5] = joint2.position.X;
+  data[6] = joint2.position.Y;
+  data[7] = joint2.position.Z;
+  data[8] = player;
+/*
+printf("%d: %d: %.2f, %.2f, %.2f %d: %.2f, %.2f, %.2f\n",
+(int) data[8], 
+(int) data[0], 
+data[1], 
+data[2], 
+data[3], 
+(int) data[4], 
+data[5], 
+data[6], 
+data[7]);
+fflush(stdout);
+*/
+  env->SetFloatArrayRegion(array2, 0, 9, data);
+  env->ReleaseFloatArrayElements(array2, data, NULL);
 }
 
 #define XML_PATH ".openni/nite_config.xml"
 
-#define CHECK_RC(nRetVal, what)										\
-	if (nRetVal != XN_STATUS_OK)									\
-	{																\
-		printf("%s failed: %s\n", what, xnGetStatusString(nRetVal));\
-		return nRetVal;												\
-	}
+#define CHECK_RC(nRetVal, what)									          \
+  if (nRetVal != XN_STATUS_OK) {								          \
+	fprintf(stderr, "%s failed: %s\n", what, xnGetStatusString(nRetVal)); \
+    fflush(stderr);                                                       \
+	return nRetVal;												          \
+  }
 
 /*
  * Class:     vavi_sensor_mocap_macbook_NiteMocap
@@ -140,15 +167,18 @@ JNIEXPORT jint JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_init
   xn::EnumerationErrors errors;
   char bytes[1024];
   snprintf(bytes, 1024, "%s/%s", getenv("HOME"), XML_PATH);
-  printf("config: %s\n", bytes);
+//fprintf(stdout, "config: %s\n", bytes);
+//fflush(stdout);
   nRetVal = g_Context.InitFromXmlFile(bytes, &errors);
   if (nRetVal == XN_STATUS_NO_NODE_PRESENT) {
     XnChar strError[1024];
     errors.ToString(strError, 1024);
-    printf("%s\n", strError);
+    fprintf(stderr, "%s\n", strError);
+    fflush(stderr);
     return nRetVal;
   } else if (nRetVal != XN_STATUS_OK) {
-    printf("Open failed: %s\n", xnGetStatusString(nRetVal));
+    fprintf(stderr, "Open failed: %s\n", xnGetStatusString(nRetVal));
+    fflush(stderr);
     return nRetVal;
   }
 
@@ -162,7 +192,8 @@ JNIEXPORT jint JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_init
 
   XnCallbackHandle hUserCallbacks, hCalibrationCallbacks, hPoseCallbacks;
   if (!g_UserGenerator.IsCapabilitySupported(XN_CAPABILITY_SKELETON)) {
-    printf("Supplied user generator doesn't support skeleton\n");
+    fprintf(stderr, "Supplied user generator doesn't support skeleton\n");
+    fflush(stderr);
     return 1;
   }
   g_UserGenerator.RegisterUserCallbacks(User_NewUser, User_LostUser, NULL, hUserCallbacks);
@@ -171,7 +202,8 @@ JNIEXPORT jint JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_init
   if (g_UserGenerator.GetSkeletonCap().NeedPoseForCalibration()) {
     g_bNeedPose = TRUE;
     if (!g_UserGenerator.IsCapabilitySupported(XN_CAPABILITY_POSE_DETECTION)) {
-      printf("Pose required, but not supported\n");
+      fprintf(stderr, "Pose required, but not supported\n");
+      fflush(stderr);
       return 1;
     }
     g_UserGenerator.GetPoseDetectionCap().RegisterToPoseCallbacks(UserPose_PoseDetected, NULL, NULL, hPoseCallbacks);
@@ -183,22 +215,24 @@ JNIEXPORT jint JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_init
   nRetVal = g_Context.StartGeneratingAll();
   CHECK_RC(nRetVal, "StartGenerating");
 
+//printf("here we go. 1\n");
+//fflush(stdout);
   return 0;
 }
 
 /*
  * Class:     vavi_sensor_mocap_macbook_NiteMocap
- * Method:    sense
- * Signature: ()I
+ * Method:    inject
+ * Signature: ([[[F)V
  */
-JNIEXPORT jint JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_sense
-  (JNIEnv *env, jobject obj) {
+JNIEXPORT void JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_inject
+  (JNIEnv *env, jobject obj, jobjectArray result) {
 
   xn::SceneMetaData sceneMD;
   xn::DepthMetaData depthMD;
 
   // Read next available data
-//  g_Context.WaitAndUpdateAll(); // pause
+  g_Context.WaitAndUpdateAll();
 
   // Process the data
   g_DepthGenerator.GetMetaData(depthMD);
@@ -209,46 +243,50 @@ JNIEXPORT jint JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_sense
   g_UserGenerator.GetUsers(aUsers, nUsers);
   for (int i = 0; i < nUsers; i++) {
     // Tracking
-    printf("%d", aUsers[i]);
+//printf("%d\n", aUsers[i]);
+//fflush(stdout);
 
     if (g_UserGenerator.GetSkeletonCap().IsTracking(aUsers[i])) {
       // Tracking
-      printf("%d - Tracking", aUsers[i]);
+      printf("%d - Tracking\n", aUsers[i]);
+      fflush(stdout);
     } else if (g_UserGenerator.GetSkeletonCap().IsCalibrating(aUsers[i])) {
       // Calibrating
-      printf("%d - Calibrating...", aUsers[i]);
+      printf("%d - Calibrating...\n", aUsers[i]);
+      fflush(stdout);
     } else {
       // Nothing
-      printf("%d - Looking for pose", aUsers[i]);
+      printf("%d - Looking for pose\n", aUsers[i]);
+      fflush(stdout);
     }
         
     if (g_UserGenerator.GetSkeletonCap().IsTracking(aUsers[i])) {
-      fillResult(i, aUsers[i], 0, XN_SKEL_HEAD, XN_SKEL_NECK);
+      jobjectArray array1 = (jobjectArray) env->GetObjectArrayElement(result, i);
+
+      inject(aUsers[i], XN_SKEL_HEAD, XN_SKEL_NECK, env, array1, 0);
             
-      fillResult(i, aUsers[i], 1, XN_SKEL_NECK, XN_SKEL_LEFT_SHOULDER);
-      fillResult(i, aUsers[i], 2, XN_SKEL_LEFT_SHOULDER, XN_SKEL_LEFT_ELBOW);
-      fillResult(i, aUsers[i], 3, XN_SKEL_LEFT_ELBOW, XN_SKEL_LEFT_HAND);
+      inject(aUsers[i], XN_SKEL_NECK, XN_SKEL_LEFT_SHOULDER, env, array1, 1);
+      inject(aUsers[i], XN_SKEL_LEFT_SHOULDER, XN_SKEL_LEFT_ELBOW, env, array1, 2);
+      inject(aUsers[i], XN_SKEL_LEFT_ELBOW, XN_SKEL_LEFT_HAND, env, array1, 3);
             
-      fillResult(i, aUsers[i], 4, XN_SKEL_NECK, XN_SKEL_RIGHT_SHOULDER);
-      fillResult(i, aUsers[i], 5, XN_SKEL_RIGHT_SHOULDER, XN_SKEL_RIGHT_ELBOW);
-      fillResult(i, aUsers[i], 6, XN_SKEL_RIGHT_ELBOW, XN_SKEL_RIGHT_HAND);
+      inject(aUsers[i], XN_SKEL_NECK, XN_SKEL_RIGHT_SHOULDER, env, array1, 4);
+      inject(aUsers[i], XN_SKEL_RIGHT_SHOULDER, XN_SKEL_RIGHT_ELBOW, env, array1, 5);
+      inject(aUsers[i], XN_SKEL_RIGHT_ELBOW, XN_SKEL_RIGHT_HAND, env, array1, 6);
             
-      fillResult(i, aUsers[i], 7, XN_SKEL_LEFT_SHOULDER, XN_SKEL_TORSO);
-      fillResult(i, aUsers[i], 8, XN_SKEL_RIGHT_SHOULDER, XN_SKEL_TORSO);
+      inject(aUsers[i], XN_SKEL_LEFT_SHOULDER, XN_SKEL_TORSO, env, array1, 7);
+      inject(aUsers[i], XN_SKEL_RIGHT_SHOULDER, XN_SKEL_TORSO, env, array1, 8);
             
-      fillResult(i, aUsers[i], 9, XN_SKEL_TORSO, XN_SKEL_LEFT_HIP);
-      fillResult(i, aUsers[i], 10, XN_SKEL_LEFT_HIP, XN_SKEL_LEFT_KNEE);
-      fillResult(i, aUsers[i], 11, XN_SKEL_LEFT_KNEE, XN_SKEL_LEFT_FOOT);
+      inject(aUsers[i], XN_SKEL_TORSO, XN_SKEL_LEFT_HIP, env, array1, 9);
+      inject(aUsers[i], XN_SKEL_LEFT_HIP, XN_SKEL_LEFT_KNEE, env, array1, 10);
+      inject(aUsers[i], XN_SKEL_LEFT_KNEE, XN_SKEL_LEFT_FOOT, env, array1, 11);
             
-      fillResult(i, aUsers[i], 12, XN_SKEL_TORSO, XN_SKEL_RIGHT_HIP);
-      fillResult(i, aUsers[i], 13, XN_SKEL_RIGHT_HIP, XN_SKEL_RIGHT_KNEE);
-      fillResult(i, aUsers[i], 14, XN_SKEL_RIGHT_KNEE, XN_SKEL_RIGHT_FOOT);
+      inject(aUsers[i], XN_SKEL_TORSO, XN_SKEL_RIGHT_HIP, env, array1, 12);
+      inject(aUsers[i], XN_SKEL_RIGHT_HIP, XN_SKEL_RIGHT_KNEE, env, array1, 13);
+      inject(aUsers[i], XN_SKEL_RIGHT_KNEE, XN_SKEL_RIGHT_FOOT, env, array1, 14);
             
-      fillResult(i, aUsers[i], 15, XN_SKEL_LEFT_HIP, XN_SKEL_RIGHT_HIP);
+      inject(aUsers[i], XN_SKEL_LEFT_HIP, XN_SKEL_RIGHT_HIP, env, array1, 15);
     }
   }
-
-  return 0;
 }
 
 /*
@@ -264,37 +302,31 @@ JNIEXPORT void JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_destroy
 
 /*
  * Class:     vavi_sensor_mocap_macbook_NiteMocap
- * Method:    get
- * Signature: ()[[[F
+ * Method:    inject
+ * Signature: ([[[F)V
  */
-JNIEXPORT jobjectArray JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_get
-  (JNIEnv *env, jobject obj) {
-
-  // Create the class
-  jclass floatClass1 = env->FindClass("[[F");
-  jclass floatClass2 = env->FindClass("[F");
-
-  // Create 1st and 2nd array
-  jobjectArray array1 = env->NewObjectArray(15, floatClass1, NULL);
+JNIEXPORT void JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_testInject
+  (JNIEnv *env, jobject obj, jobjectArray result) {
   
   for (int i = 0; i < 15; i++) {
-    jobjectArray array2 = env->NewObjectArray(16, floatClass2, NULL);
+    jobjectArray array1 = (jobjectArray) env->GetObjectArrayElement(result, i);
 
-    for (int j = 0; j < 16; j++) {
-      // Create 3rd Array
-      jfloatArray array3 = env->NewFloatArray(9);
-
-      // Put some data into array3
-      env->SetFloatArrayRegion(array3, 0, 9, result[i][j]);
-
-      // Add array 3 to array 2 and array 2 to array 1
-      env->SetObjectArrayElement(array2, j, array3);
+    for (int i = 0; i < 15; i++) {
+      jfloatArray array2 = (jfloatArray) env->GetObjectArrayElement(array1, 0);
+      float* data = env->GetFloatArrayElements(array2, NULL);
+      data[0] = 1;
+      data[1] = 2;
+      data[2] = 3;
+      data[3] = 4;
+      data[4] = 5;
+      data[5] = 6;
+      data[6] = 7;
+      data[7] = 8;
+      data[8] = 9;
+      env->SetFloatArrayRegion(array2, 0, 9, data);
+      env->ReleaseFloatArrayElements(array2, data, NULL);
     }
-
-    env->SetObjectArrayElement(array1, i, array2);
   }
-
-  return array1;
 }
 
 /* */

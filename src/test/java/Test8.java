@@ -4,7 +4,6 @@
  * Programmed by Naohide Sano
  */
 
-import vavi.sensor.mocap.Mocap;
 import vavi.sensor.mocap.macbook.NiteMocap;
 
 
@@ -18,23 +17,29 @@ public class Test8 {
 
     public void test01() throws Exception {
         System.err.println("initializing...");
-        Mocap<float[][][]> mocap = new NiteMocap();
+        NiteMocap mocap = new NiteMocap();
         System.err.println("done.");
         for (int i = 0; i < 1000; i++) {
 //System.err.println("here: " + i);
             mocap.sense();
             float[][][] r = mocap.get();
-System.err.println("here: " + r[0][0].length + ", " + r[0].length + ", " + r.length);
-            for (int j = 0; j < 15; j++) {
-                System.err.print("[" + j + "]");
-                for (int k = 0; k < 16; k++) {
-                    System.err.print("[" + k + "] ");
-                    for (int l = 0; l < 9; l++) {
-                        System.err.print(r[j][k][l] + ", ");
+            for (int j = 0; j < 1; j++) {
+                if (r[j][0][8] != 0) {
+                    for (int k = 0; k < 16; k++) {
+                        for (int l = 0; l < 9; l++) {
+                            if (r[j][k][0] != 0 && r[j][k][4] != 0) {
+                                if (l == 0) {
+                                    System.err.print("[" + j + "][" + k + "] ");
+                                }
+                                System.err.printf("%.2f, ", r[j][k][l]);
+                            }
+                        }
+                        System.err.println();
                     }
                     System.err.println();
+//                } else {
+//                    System.err.println("not detect: " + j);
                 }
-                System.err.println();
             }
             Thread.sleep(100);
         }
