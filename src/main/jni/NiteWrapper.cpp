@@ -40,7 +40,6 @@ xn::UserGenerator g_UserGenerator;
 XnBool g_bNeedPose = FALSE;
 XnChar g_strPose[20] = "";
 
-JavaVM *gJavaVM;
 jmethodID mid;
 jclass mClass;
 jobject mObject;
@@ -49,10 +48,15 @@ jobject mObject;
 // Code
 //---------------------------------------------------------------------------
 
-// Callback: New user was detected
+/*
+ * Callback: New user was detected
+ *
+ * @sequence 1
+ * @next Looking for pose
+ */
 void XN_CALLBACK_TYPE User_NewUser(xn::UserGenerator& generator, XnUserID nId, void* pCookie) {
-printf("New User %d\n", nId);
-fflush(stdout);
+//printf("New User %d\n", nId);
+//fflush(stdout);
   // New user found
   if (g_bNeedPose) {
     g_UserGenerator.GetPoseDetectionCap().StartPoseDetection(g_strPose, nId);
@@ -64,29 +68,32 @@ fflush(stdout);
   jsize ct;
   jint ret = JNI_GetCreatedJavaVMs(&vm, 1, &ct);
   if (ret != JNI_OK) {
-fprintf(stderr, "no vm\n");
+fprintf(stderr, "User_NewUser: failed to get Java VM\n");
 fflush(stderr);
     return;
   }
+
   int status;
   JNIEnv *env;
   bool isAttached = false;
 
   status = vm->GetEnv((void**) &env, JNI_VERSION_1_6);
   if (status < 0) {
-fprintf(stderr, "callback_handler: failed to get JNI environment, assuming native thread\n");
+fprintf(stderr, "User_NewUser: failed to get JNI environment, assuming native thread\n");
 fflush(stderr);
-    status = gJavaVM->AttachCurrentThread((void**) &env, NULL);
+    status = vm->AttachCurrentThread((void**) &env, NULL);
     if (status < 0) {
-fprintf(stderr, "callback_handler: failed to attach current thread");
+fprintf(stderr, "User_NewUser: failed to attach current thread");
 fflush(stderr);
        return;
     }
     isAttached = true;
   }
-  env->CallStaticVoidMethod(mClass, mid, nId);
+
+  env->CallVoidMethod(mObject, mid, nId);
+
   if (isAttached) {
-    gJavaVM->DetachCurrentThread();
+    vm->DetachCurrentThread();
   }
 }
 
@@ -96,7 +103,12 @@ printf("Lost user %d\n", nId);
 fflush(stdout);
 }
 
-// Callback: Detected a pose
+/*
+ * Callback: Detected a pose
+ *
+ * @sequence 2
+ * @next Calibrating...
+ */
 void XN_CALLBACK_TYPE UserPose_PoseDetected(xn::PoseDetectionCapability& capability, const XnChar* strPose, XnUserID nId, void* pCookie) {
 printf("Pose %s detected for user %d\n", strPose, nId);
 fflush(stdout);
@@ -104,13 +116,22 @@ fflush(stdout);
   g_UserGenerator.GetSkeletonCap().RequestCalibration(nId, TRUE);
 }
 
-// Callback: Started calibration
+/*
+ * Callback: Started calibration
+ *
+ * @sequence 3
+ */
 void XN_CALLBACK_TYPE UserCalibration_CalibrationStart(xn::SkeletonCapability& capability, XnUserID nId, void* pCookie) {
 printf("Calibration started for user %d\n", nId);
 fflush(stdout);
 }
 
-// Callback: Finished calibration
+/*
+ * Callback: Finished calibration
+ *
+ * @sequence 4
+ * @next Tracking
+ */
 void XN_CALLBACK_TYPE UserCalibration_CalibrationEnd(xn::SkeletonCapability& capability, XnUserID nId, XnBool bSuccess, void* pCookie) {
   if (bSuccess)	{
     // Calibration succeeded
@@ -195,6 +216,11 @@ fflush(stdout);
  */
 JNIEXPORT jint JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_init
   (JNIEnv *env, jobject obj) {
+
+  jclass clazz = env->GetObjectClass(obj);
+  mClass = (jclass) env->NewGlobalRef(clazz);
+  mObject = env->NewWeakGlobalRef(obj);
+  mid = env->GetMethodID(mClass, "whenNewUser","(I)V");
 
   XnStatus nRetVal = XN_STATUS_OK;
 
@@ -330,107 +356,9 @@ JNIEXPORT void JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_destroy
   (JNIEnv *env, jobject obj) {
 
   env->DeleteGlobalRef(mClass);
-  env->DeleteGlobalRef(mObject);
+  env->DeleteWeakGlobalRef(mObject);
 
   g_Context.Shutdown();
-}
-
-/*
- * Class:     vavi_sensor_mocap_macbook_NiteMocap
- * Method:    testInject
- * Signature: ([[[F)V
- */
-JNIEXPORT void JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_testInject
-  (JNIEnv *env, jobject obj, jobjectArray result) {
-  
-  for (int i = 0; i < 15; i++) {
-    jobjectArray array1 = (jobjectArray) env->GetObjectArrayElement(result, i);
-
-    for (int i = 0; i < 15; i++) {
-      jfloatArray array2 = (jfloatArray) env->GetObjectArrayElement(array1, 0);
-      float* data = env->GetFloatArrayElements(array2, NULL);
-      data[0] = 1;
-      data[1] = 2;
-      data[2] = 3;
-      data[3] = 4;
-      data[4] = 5;
-      data[5] = 6;
-      data[6] = 7;
-      data[7] = 8;
-      data[8] = 9;
-      env->SetFloatArrayRegion(array2, 0, 9, data);
-      env->ReleaseFloatArrayElements(array2, data, NULL);
-    }
-  }
-}
-
-/*
- * Class:     vavi_sensor_mocap_macbook_NiteMocap
- * Method:    initVM
- * Signature: (Ljava/lang/Object;)V
- */
-JNIEXPORT void JNICALL Java_vavi_sensor_mocap_macbook_NiteMocap_initVM
-  (JNIEnv *env, jobject obj, jobject weakReference) {
-
-  jclass clazz = env->GetObjectClass(obj);
-  mClass = (jclass) env->NewGlobalRef(clazz);
-  mObject = env->NewGlobalRef(weakReference);
-  mid = env->GetMethodID(mClass, "whenNewUser","(I)V");
-}
-
-#pragma GCC diagnostic ignored "-Wwrite-strings" 
-
-static const char *className = "vavi/sensor/mocap/macbook/NiteMocap";
-static JNINativeMethod methods[] = {
-  {
-    "initVM",
-    "(Ljava/lang/Object;)V",
-    (void*) Java_vavi_sensor_mocap_macbook_NiteMocap_initVM
-  }, {
-    "init",
-    "()I",
-    (void*) Java_vavi_sensor_mocap_macbook_NiteMocap_init
-  }, {
-    "inject",
-    "([[[F)V",
-    (void*) Java_vavi_sensor_mocap_macbook_NiteMocap_inject
-  }, {
-    "destroy",
-    "()V",
-    (void*) Java_vavi_sensor_mocap_macbook_NiteMocap_destroy
-  }
-};
-
-/*
- * TODO avoid Naitive Method register
- */
-jint JNI_OnLoad(JavaVM* vm, void* reserved) {
-  JNIEnv *env;
-  gJavaVM = vm;
-  int result;
-
-  if (vm->GetEnv((void**) &env, JNI_VERSION_1_6) != JNI_OK) {
-    fprintf(stderr, "Failed to get the environment using GetEnv()");
-    fflush(stderr);
-    return -1;
-  }
- 
-  jclass clazz = env->FindClass(className);
-  if (clazz == NULL) {
-    fprintf(stderr, "Native registration unable to find class '%s'\n", className);
-    fflush(stderr);
-    goto bail;
-  }
-  if (env->RegisterNatives(clazz, methods, sizeof(methods) / sizeof(methods[0])) < 0) {
-    fprintf(stderr, "RegisterNatives failed for '%s'\n", className);
-    fflush(stderr);
-    goto bail;
-  }
- 
-  result = JNI_VERSION_1_6;
-  
-bail:
-   return result;
 }
 
 /* */

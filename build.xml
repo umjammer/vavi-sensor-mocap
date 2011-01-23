@@ -115,6 +115,7 @@
       <arg line="-arch i386 -arch x86_64" />
       <arg line="-L${openni.home}/Lib"/>
       <arg line="-lOpenNI"/>
+      <arg line="-framework JavaVM"/>
       <arg line="-o" />
       <targetfile />
       <srcfile />

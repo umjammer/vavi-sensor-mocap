@@ -20,7 +20,7 @@ public class NiteMocap implements Mocap<float[][][]> {
     /** */
     private native int init();
     
-    /** */
+    /** not thread safe */
     public int sense() {
         inject(data);
         return 0;
@@ -41,10 +41,17 @@ public class NiteMocap implements Mocap<float[][][]> {
         destroy();
     }
 
+    /** 使い回し not thread safe */
     private float[][][] data = new float[15][16][9];
 
+    /** not thread safe */
     private native void inject(float[][][] data);
 
+    private void whenNewUser(int id) {
+        System.err.println("********************* whenNewUser " + id + " **********************");
+    }
+    
+    /** not thread safe */
     public float[][][] get() {
         return data;
     }
